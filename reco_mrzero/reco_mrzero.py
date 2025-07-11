@@ -3,7 +3,7 @@ import torch
 import MRzeroCore as mr0
 import ggrappa
 
-from .reco_tools import grappa_reconstruction
+from .reco_tools import grappa_reconstruction, coil_combination
 
 # -----------------------------------------------------------------------------------------------------------------
 #  Utils
@@ -226,7 +226,7 @@ class RecoMRzero:
         timing.flat[self.acquisition_order.astype(int)] = durations[adc_mask]
         return timing
     
-    def runReconstruction(
+    def runReco_GRAPPA(
             self,
             signal: torch.Tensor,
             reorder_kspace: bool = False,
@@ -262,7 +262,9 @@ class RecoMRzero:
         acs = to_recotwix_shape(acs)
         kspace = to_recotwix_shape(kspace)
         kspace_reco =  grappa_reconstruction(kspace, acs, af)
-        return kspace_reco
+        dim_enc = [10, 13, 15]
+        self.img = coil_combination(kspace, coil_sens=None, dim_enc=dim_enc, rss=True)
+        return self.img
     
     
 def to_recotwix_shape(kspace: torch.Tensor):
