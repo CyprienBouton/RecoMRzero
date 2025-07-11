@@ -3,6 +3,8 @@ import torch
 import MRzeroCore as mr0
 import ggrappa
 
+from .reco_tools import grappa_reconstruction
+
 # -----------------------------------------------------------------------------------------------------------------
 #  Utils
 # -----------------------------------------------------------------------------------------------------------------
@@ -192,7 +194,7 @@ class RecoMRzero:
         Ncoil = signal.shape[-1]
         kspace = torch.zeros((self.Npar_os, self.Nlin_os, self.Nread*self.freq_os, Ncoil), dtype=torch.complex64)
         Nfreq = len(self.freq_acquired)
-        acquired_mask = np.ix_(self.acquisition_order, self.freq_acquired, range(Ncoil))
+        acquired_mask = np.ix_(self.acquisition_order, self.freq_acquired, range(Ncoil))    
         kspace.view(-1, self.Nread*self.freq_os, Ncoil)[acquired_mask] = signal.reshape(-1, Nfreq, Ncoil)
         if reorder_kspace:
             kspace = torch.transpose(torch.flip(kspace, (0,1,2)), 1, 2) # reorder kspace
@@ -243,7 +245,7 @@ class RecoMRzero:
         par_not_null = (kspace.nonzero(as_tuple=True)[2]).unique()
         if len(par_not_null)>1:
             mask_par = [par_not_null.diff(prepend=torch.Tensor([0]))==1]
-            min_par = par_not_null[mask_par][0]-1
+            min_par = par_not_null[mask_par][0]
             max_par = par_not_null[mask_par][-1]
         
             if par_not_null.diff().max()>1:
@@ -257,6 +259,42 @@ class RecoMRzero:
         
         af = [af_lin, af_par]
         acs = kspace[:,min_lin:max_lin+1, min_par:max_par+1]
-        acs = crop_nonzero_region(acs)
-        kspace_reco, _ = ggrappa.GRAPPA_Recon(kspace, acs, af)
+        acs = to_recotwix_shape(acs)
+        kspace = to_recotwix_shape(kspace)
+        kspace_reco =  grappa_reconstruction(kspace, acs, af)
         return kspace_reco
+    
+    
+def to_recotwix_shape(kspace: torch.Tensor):
+    """
+    Reorders a k-space tensor with shape (Par, Lin, Col, Cha) into a full 17D format
+    following the `recotwix_order`.
+
+    Output shape: (1,1,1,1,1,1,1,1,1,1,Par,1,1,Lin,Cha,Col)
+    """
+    recotwix_order = [
+        'Ide', 'Idd', 'Idc', 'Idb', 'Ida',
+        'Seg', 'Set', 'Rep', 'Phs', 'Eco',
+        'Par', 'Sli', 'Ave', 'Lin', 'Cha', 'Col'
+    ]
+    
+    # Map input tensor dimensions to their corresponding names
+    source_dims = {'Par': 0, 'Lin': 1, 'Col': 2, 'Cha': 3}
+    
+    # Initialize the full 17D shape with ones (singleton dimensions)
+    target_shape = [1] * len(recotwix_order)
+    
+    # Fill in the actual sizes from the input tensor
+    for name, dim_idx in source_dims.items():
+        target_pos = recotwix_order.index(name)
+        target_shape[target_pos] = kspace.shape[dim_idx]
+    
+    # Reshape input tensor into the target shape
+    kspace_reordered = kspace.permute(
+        source_dims['Par'],
+        source_dims['Lin'],
+        source_dims['Col'],
+        source_dims['Cha']
+    ).reshape(target_shape)
+    
+    return kspace_reordered
