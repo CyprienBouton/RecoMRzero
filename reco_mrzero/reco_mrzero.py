@@ -257,7 +257,6 @@ class RecoMRzero:
         
         af = [af_lin, af_par]
         acs = kspace[:,min_lin:max_lin+1, min_par:max_par+1]
-        acs = crop_nonzero_region(acs.abs())
-        kspace = kspace.abs()
+        acs = crop_nonzero_region(acs)
         kspace_reco, _ = ggrappa.GRAPPA_Recon(kspace, acs, af)
         return kspace_reco
