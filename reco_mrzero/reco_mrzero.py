@@ -242,7 +242,7 @@ class RecoMRzero:
         else:
             af_lin = 1
 
-        par_not_null = (kspace.nonzero(as_tuple=True)[2]).unique()
+        par_not_null = (kspace.nonzero(as_tuple=True)[0]).unique()
         if len(par_not_null)>1:
             mask_par = [par_not_null.diff(prepend=torch.Tensor([0]))==1]
             min_par = par_not_null[mask_par][0]
@@ -254,16 +254,16 @@ class RecoMRzero:
                 af_par = 1
         else:
             min_par = 0
-            max_par = -1
+            max_par = 0
             af_par = 1
         
         af = [af_lin, af_par]
-        acs = kspace[:,min_lin:max_lin+1, min_par:max_par+1]
+        acs = kspace[min_par:max_par+1, min_lin:max_lin+1]
         acs = to_recotwix_shape(acs)
         kspace = to_recotwix_shape(kspace)
         kspace_reco =  grappa_reconstruction(kspace, acs, af)
         dim_enc = [10, 13, 15]
-        self.img = coil_combination(kspace, coil_sens=None, dim_enc=dim_enc, rss=True)
+        self.img = coil_combination(kspace_reco, coil_sens=None, dim_enc=dim_enc, rss=True)
         return self.img
     
     def reorder_dims(self, volume:torch.Tensor):
