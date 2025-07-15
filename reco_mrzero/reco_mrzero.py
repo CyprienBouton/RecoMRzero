@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import MRzeroCore as mr0
 import ggrappa
+import nibabel as nib
 
 from .reco_tools import grappa_reconstruction, coil_combination
 
@@ -265,6 +266,16 @@ class RecoMRzero:
         dim_enc = [10, 13, 15]
         self.img = coil_combination(kspace_reco, coil_sens=None, dim_enc=dim_enc, rss=True)
         return self.img
+    
+    def make_nifti(self, volume:torch.Tensor):        
+        if volume.squeeze().ndim > 4 :
+            print(f"{volume.ndim}D data is not supported")
+            return
+        
+        volume = self.reorder_dims(volume)
+        img = nib.Nifti1Image(volume.detach().cpu().numpy(), np.eye(4))
+        return img # can be save to nifti with to_filename(...) method
+
     
     
 def to_recotwix_shape(kspace: torch.Tensor):
