@@ -267,6 +267,29 @@ class RecoMRzero:
         self.img = coil_combination(kspace_reco, coil_sens=None, dim_enc=dim_enc, rss=True)
         return self.img
     
+    def reorder_dims(self, volume:torch.Tensor):
+        '''
+        reorder dimensions to bring spatial dimensions to the first three dimensions
+        '''
+        dim_size = volume.shape
+        # permute to match [PE, RO, SLC/PAR, REP, others]
+        dims =  ('Ide', 'Idd', 'Idc', 'Idb', 'Ida', 'Seg', 'Set', 'Rep', 'Phs', 'Eco', 'Par', 'Sli', 'Ave', 'Lin', 'Cha', 'Col')
+        dim_info = {}
+        for dim in dims:
+            ind = dims.index(dim)
+            dim_info[dim] = {'ind':ind, 'len':dim_size[ind]}
+            
+        dim = dim_info
+        
+        perm_ind = [dim['Lin']['ind'], dim['Col']['ind'], dim['Par']['ind'], dim['Sli']['ind'], dim['Rep']['ind'], dim['Cha']['ind']]
+        perm_ind = perm_ind + [d['ind'] for d in dim.values() if d['ind'] not in perm_ind]
+        volume = volume.permute(perm_ind) 
+        volume = volume.squeeze()
+        if dim_info['Par']['len'] == 1 and dim_info['Sli']['len'] == 1:
+            volume = volume.unsqueeze(dim=2)
+        return volume
+    
+    
     def make_nifti(self, volume:torch.Tensor):        
         if volume.squeeze().ndim > 4 :
             print(f"{volume.ndim}D data is not supported")
