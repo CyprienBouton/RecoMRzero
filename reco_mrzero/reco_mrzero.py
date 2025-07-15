@@ -281,7 +281,7 @@ class RecoMRzero:
             
         dim = dim_info
         
-        perm_ind = [dim['Lin']['ind'], dim['Col']['ind'], dim['Par']['ind'], dim['Sli']['ind'], dim['Rep']['ind'], dim['Cha']['ind']]
+        perm_ind = [dim['Col']['ind'], dim['Lin']['ind'], dim['Par']['ind'], dim['Sli']['ind'], dim['Rep']['ind'], dim['Cha']['ind']]
         perm_ind = perm_ind + [d['ind'] for d in dim.values() if d['ind'] not in perm_ind]
         volume = volume.permute(perm_ind) 
         volume = volume.squeeze()
