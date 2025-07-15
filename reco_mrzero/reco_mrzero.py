@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import MRzeroCore as mr0
-import ggrappa
 import nibabel as nib
 
 from .reco_tools import grappa_reconstruction, coil_combination
@@ -264,7 +263,7 @@ class RecoMRzero:
         kspace = to_recotwix_shape(kspace)
         kspace_reco =  grappa_reconstruction(kspace, acs, af)
         dim_enc = [10, 13, 15]
-        self.img = coil_combination(kspace_reco, coil_sens=None, dim_enc=dim_enc, rss=True)
+        self.img = coil_combination(kspace, coil_sens=None, dim_enc=dim_enc, rss=True)
         return self.img
     
     def reorder_dims(self, volume:torch.Tensor):
