@@ -215,7 +215,7 @@ class RecoMRzero:
         acquired_mask = np.ix_(self.acquisition_order, self.freq_acquired, range(Ncoil))    
         kspace.view(-1, self.Nread*self.freq_os, Ncoil)[acquired_mask] = signal.reshape(-1, Nfreq, Ncoil)
         if reorder_kspace:
-            kspace = torch.transpose(torch.flip(kspace, (0,1,2)), 1, 2) # reorder kspace
+            kspace = torch.flip(kspace, (0,1,2)) # reorder kspace
         return kspace
     
     def get_TR_matrix(self):
