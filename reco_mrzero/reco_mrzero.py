@@ -247,7 +247,7 @@ class RecoMRzero:
     def runReco_GRAPPA(
             self,
             signal: torch.Tensor,
-            reorder_kspace: bool = False,
+            reorder_kspace: bool = True,
         ):
         self.get_dim_info(signal)
         kspace = self.get_kspace_from_signal(signal, reorder_kspace)
