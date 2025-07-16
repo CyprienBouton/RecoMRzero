@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import MRzeroCore as mr0
-import ggrappa
 import nibabel as nib
 
 from .reco_tools import grappa_reconstruction, coil_combination
@@ -121,6 +120,8 @@ class RecoMRzero:
         self.grappa_par = None
         self.times_after_rep = None
         self.is3D = None
+        self.dim_info = None
+        self.dim_enc = None
         
         self._get_Nread()
         self._get_line_partition_enc()
@@ -176,6 +177,22 @@ class RecoMRzero:
             self.kpar = np.ones_like(self.par_enc)
             self.Npar_os = 1
             self.acquisition_order = (self.klin-full_klin.min())
+            
+    def get_dim_info(self, signal):
+        self.dim_info = {}
+        Ncoil = signal.shape[-1]
+        dim_size = {
+            'Par': self.Npar_os, 
+            'Lin': self.Nlin_os, 
+            'Col': self.Nread*self.freq_os, 
+            'Cha': Ncoil,
+        }
+        # permute to match [PE, RO, SLC/PAR, REP, others]
+        dims =  ('Ide', 'Idd', 'Idc', 'Idb', 'Ida', 'Seg', 'Set', 'Rep', 'Phs', 'Eco', 'Par', 'Sli', 'Ave', 'Lin', 'Cha', 'Col')
+        for dim in dims:
+            ind = dims.index(dim)
+            self.dim_info[dim] = {'ind':ind, 'len':dim_size[dim] if dim in dim_size.keys() else 1}
+        self.dim_enc  = [self.dim_info['Col']['ind'], self.dim_info['Lin']['ind'], self.dim_info['Par']['ind']]
     
     ###############################
     # Main functions
@@ -198,7 +215,7 @@ class RecoMRzero:
         acquired_mask = np.ix_(self.acquisition_order, self.freq_acquired, range(Ncoil))    
         kspace.view(-1, self.Nread*self.freq_os, Ncoil)[acquired_mask] = signal.reshape(-1, Nfreq, Ncoil)
         if reorder_kspace:
-            kspace = torch.transpose(torch.flip(kspace, (0,1,2)), 1, 2) # reorder kspace
+            kspace = torch.flip(kspace, (0,1,2)) # reorder kspace
         return kspace
     
     def get_TR_matrix(self):
@@ -230,8 +247,9 @@ class RecoMRzero:
     def runReco_GRAPPA(
             self,
             signal: torch.Tensor,
-            reorder_kspace: bool = False,
+            reorder_kspace: bool = True,
         ):
+        self.get_dim_info(signal)
         kspace = self.get_kspace_from_signal(signal, reorder_kspace)
         
         lin_not_null = (kspace.nonzero(as_tuple=True)[1]).unique()
@@ -243,10 +261,10 @@ class RecoMRzero:
         else:
             af_lin = 1
 
-        par_not_null = (kspace.nonzero(as_tuple=True)[2]).unique()
+        par_not_null = (kspace.nonzero(as_tuple=True)[0]).unique()
         if len(par_not_null)>1:
             mask_par = [par_not_null.diff(prepend=torch.Tensor([0]))==1]
-            min_par = par_not_null[mask_par][0]
+            min_par = par_not_null[mask_par][0]-1
             max_par = par_not_null[mask_par][-1]
         
             if par_not_null.diff().max()>1:
@@ -255,37 +273,29 @@ class RecoMRzero:
                 af_par = 1
         else:
             min_par = 0
-            max_par = -1
+            max_par = kspace.shape[0]-1
             af_par = 1
         
         af = [af_lin, af_par]
-        acs = kspace[:,min_lin:max_lin+1, min_par:max_par+1]
+        acs = kspace[min_par:max_par+1, min_lin:max_lin+1]
         acs = to_recotwix_shape(acs)
         kspace = to_recotwix_shape(kspace)
-        kspace_reco =  grappa_reconstruction(kspace, acs, af)
-        dim_enc = [10, 13, 15]
-        self.img = coil_combination(kspace_reco, coil_sens=None, dim_enc=dim_enc, rss=True)
+        if max(af)>1:
+            kspace =  grappa_reconstruction(kspace, acs, af)
+        self.img = coil_combination(kspace, coil_sens=None, dim_enc=self.dim_enc, rss=True)
         return self.img
     
     def reorder_dims(self, volume:torch.Tensor):
         '''
         reorder dimensions to bring spatial dimensions to the first three dimensions
         '''
-        dim_size = volume.shape
-        # permute to match [PE, RO, SLC/PAR, REP, others]
-        dims =  ('Ide', 'Idd', 'Idc', 'Idb', 'Ida', 'Seg', 'Set', 'Rep', 'Phs', 'Eco', 'Par', 'Sli', 'Ave', 'Lin', 'Cha', 'Col')
-        dim_info = {}
-        for dim in dims:
-            ind = dims.index(dim)
-            dim_info[dim] = {'ind':ind, 'len':dim_size[ind]}
-            
-        dim = dim_info
+        dim = self.dim_info
         
         perm_ind = [dim['Col']['ind'], dim['Lin']['ind'], dim['Par']['ind'], dim['Sli']['ind'], dim['Rep']['ind'], dim['Cha']['ind']]
         perm_ind = perm_ind + [d['ind'] for d in dim.values() if d['ind'] not in perm_ind]
         volume = volume.permute(perm_ind) 
         volume = volume.squeeze()
-        if dim_info['Par']['len'] == 1 and dim_info['Sli']['len'] == 1:
+        if dim['Par']['len'] == 1 and dim['Sli']['len'] == 1:
             volume = volume.unsqueeze(dim=2)
         return volume
     
