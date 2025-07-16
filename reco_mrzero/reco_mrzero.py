@@ -277,10 +277,10 @@ class RecoMRzero:
             af_par = 1
         
         af = [af_lin, af_par]
+        acs = kspace[min_par:max_par+1, min_lin:max_lin+1]
+        acs = to_recotwix_shape(acs)
+        kspace = to_recotwix_shape(kspace)
         if max(af)>1:
-            acs = kspace[min_par:max_par+1, min_lin:max_lin+1]
-            acs = to_recotwix_shape(acs)
-            kspace = to_recotwix_shape(kspace)
             kspace =  grappa_reconstruction(kspace, acs, af)
         self.img = coil_combination(kspace, coil_sens=None, dim_enc=self.dim_enc, rss=True)
         return self.img
