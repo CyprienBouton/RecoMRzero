@@ -339,8 +339,8 @@ def to_recotwix_shape(kspace: torch.Tensor):
     kspace_reordered = kspace.permute(
         source_dims['Par'],
         source_dims['Lin'],
+        source_dims['Cha'],
         source_dims['Col'],
-        source_dims['Cha']
     ).reshape(target_shape)
     
     return kspace_reordered
