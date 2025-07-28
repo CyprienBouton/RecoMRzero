@@ -135,7 +135,7 @@ class RecoMRzero:
         if self.freq_os not in [1, 2]:
             raise ValueError("Oversampling factor should be 1 (no oversampling) or 2 (Siemens default).")
         for i, r in enumerate(self.seq0):
-            if r.adc_usage.sum() > 0:
+            if r.adc_usage.sum() > 0 and np.rad2deg(r.pulse.angle)<=90:
                 kspace = self.seq0.get_full_kspace()[i]
                 adc_mask = r.adc_usage>0
                 center = kspace[adc_mask][:,0].abs().argmin()
@@ -149,7 +149,7 @@ class RecoMRzero:
     def _get_line_partition_enc(self):
         lines_enc, partitions_enc = [], []
         for kspace, r in zip(self.seq0.get_full_kspace(), self.seq0):
-            if r.adc_usage.sum() > 0:
+            if r.adc_usage.sum() > 0 and np.rad2deg(r.pulse.angle)<=90:
                 ph1, ph2 = kspace[self.col_center_idx, 1:-1]
                 lines_enc.append( torch.round(ph1, decimals=2) )
                 partitions_enc.append( torch.round(ph2, decimals=2) )
@@ -212,8 +212,9 @@ class RecoMRzero:
         Ncoil = signal.shape[-1]
         kspace = torch.zeros((self.Npar_os, self.Nlin_os, self.Nread*self.freq_os, Ncoil), dtype=torch.complex64)
         Nfreq = len(self.freq_acquired)
-        acquired_mask = np.ix_(self.acquisition_order, self.freq_acquired, range(Ncoil))    
-        kspace.view(-1, self.Nread*self.freq_os, Ncoil)[acquired_mask] = signal.reshape(-1, Nfreq, Ncoil)
+        acquired_mask = np.ix_(self.acquisition_order, self.freq_acquired, range(Ncoil))
+        used_adc_mask = torch.cat([torch.tensor(r.adc_usage.sum()*[np.rad2deg(r.pulse.angle)<=90]) for r in self.seq0 if r.adc_usage.sum()>0])
+        kspace.view(-1, self.Nread*self.freq_os, Ncoil)[acquired_mask] = signal[used_adc_mask].reshape(-1, Nfreq, Ncoil)
         if reorder_kspace:
             kspace = torch.flip(kspace, (0,1,2)) # reorder kspace
         return kspace
@@ -253,7 +254,7 @@ class RecoMRzero:
         kspace = self.get_kspace_from_signal(signal, reorder_kspace)
         
         lin_not_null = (kspace.nonzero(as_tuple=True)[1]).unique()
-        mask_lin = [lin_not_null.diff(prepend=torch.Tensor([0]))==1]
+        mask_lin = [lin_not_null.diff(prepend=torch.Tensor([np.nan]))==1]
         min_lin = lin_not_null[mask_lin][0]-1
         max_lin = lin_not_null[mask_lin][-1]
         if lin_not_null.diff().max()>1:
