@@ -17,7 +17,7 @@ setup(name='recomrzero', # this will be name of package in packages list : pip l
       license='MIT License',
       packages=['reco_mrzero'],
       install_requires = [
-            'MRzeroCore',
+            'MRzeroCore @ git+https://github.com/CyprienBouton/MRzero-Core.git@T1_T2_variable',
             'numpy',
             'torch',
             'nibabel',
