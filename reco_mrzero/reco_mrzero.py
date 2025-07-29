@@ -3,7 +3,7 @@ import torch
 import MRzeroCore as mr0
 import nibabel as nib
 
-from .reco_tools import grappa_reconstruction, coil_combination
+from .reco_tools import grappa_reconstruction, coil_combination, pics_reconstruction, calc_coil_sensitivity
 
 # -----------------------------------------------------------------------------------------------------------------
 #  Utils
@@ -122,6 +122,7 @@ class RecoMRzero:
         self.is3D = None
         self.dim_info = None
         self.dim_enc = None
+        self.img = None
         
         self._get_Nread()
         self._get_line_partition_enc()
@@ -236,7 +237,7 @@ class RecoMRzero:
         idx_previous_IR = np.searchsorted(idx_IRs, idx_adc) - 1
         TR_matrix.flat[self.acquisition_order.astype(int)] = TRs_before[idx_previous_IR]
 
-        return TR_matrix
+        return torch.tensor(TR_matrix, device=self.seq0.device, dtype=torch.float32)
     
     def get_timing_matrix(self):
         timing = np.zeros((self.Npar_os, self.Nlin_os))
@@ -286,6 +287,33 @@ class RecoMRzero:
         self.img = coil_combination(kspace, coil_sens=None, dim_enc=self.dim_enc, rss=True)
         return self.img
     
+    def runReco_corrupted_RR_cs(
+        self,
+        signal: torch.Tensor,
+        method: str = 'caldir',
+        reorder_kspace: bool = False,
+        alpha: float = 0.5,
+        regularization_value = 0.1,
+    ):
+        self.get_dim_info(signal)
+        kspace = self.get_kspace_from_signal(signal, reorder_kspace)
+        kspace = to_recotwix_shape(kspace)
+        TR_matrix = self.get_TR_matrix()
+        if reorder_kspace:
+            TR_matrix = TR_matrix.flip((0,1))
+        kspace_sparse = kspace.clone()
+        # Prepare TR mask to broadcast with kspace shape
+        broadcast_shape = [1] * kspace_sparse.ndim
+        broadcast_shape[self.dim_info['Par']['ind']] = TR_matrix.shape[0]  # Par
+        broadcast_shape[self.dim_info['Lin']['ind']] = TR_matrix.shape[1]  # Lin
+        TR_mask = (TR_matrix > TR_matrix.mean() + alpha * TR_matrix.std()).view(broadcast_shape)
+
+        # Apply masking to k-space
+        kspace_sparse = kspace_sparse.masked_fill(TR_mask, 0)
+        
+        coil_sens = calc_coil_sensitivity(kspace_sparse, self.dim_enc, method=method)
+        self.img = pics_reconstruction(kspace_sparse, coil_sens, regularization_value).abs()
+
     def reorder_dims(self, volume:torch.Tensor):
         '''
         reorder dimensions to bring spatial dimensions to the first three dimensions
