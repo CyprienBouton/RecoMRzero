@@ -298,6 +298,7 @@ class RecoMRzero:
         self.get_dim_info(signal)
         kspace = self.get_kspace_from_signal(signal, reorder_kspace)
         kspace = to_recotwix_shape(kspace)
+        kspace /= kspace.abs().max()
         TR_matrix = self.get_TR_matrix()
         if reorder_kspace:
             TR_matrix = TR_matrix.flip((0,1))
