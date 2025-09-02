@@ -195,6 +195,15 @@ class RecoMRzero:
             self.dim_info[dim] = {'ind':ind, 'len':dim_size[dim] if dim in dim_size.keys() else 1}
         self.dim_enc  = [self.dim_info['Col']['ind'], self.dim_info['Lin']['ind'], self.dim_info['Par']['ind']]
     
+    def _get_resolution(self):
+        """Get the spatial resolution from the sequence.
+        Returns:
+            tuple: (x, y, z) resolution in mm.
+        """
+        kspace = self.seq0.get_kspace()[3:]
+        delta_kspace = kspace.max(0).values - kspace.min(0).values
+        return 1/delta_kspace.numpy() * 1000  # in mm
+    
     ###############################
     # Main functions
     ###############################    
@@ -336,7 +345,15 @@ class RecoMRzero:
             return
         
         volume = self.reorder_dims(volume)
-        img = nib.Nifti1Image(volume.detach().cpu().numpy(), np.eye(4))
+        # Ensure the resolution is a 3-element tuple
+        resolution = self._get_resolution()
+
+        # Build the affine matrix with the resolution (diagonal)
+        affine = np.eye(4)
+        affine[0, 0] = resolution[0]
+        affine[1, 1] = resolution[1]
+        affine[2, 2] = resolution[2]
+        img = nib.Nifti1Image(volume.detach().cpu().numpy(), affine)
         return img # can be save to nifti with to_filename(...) method
 
     
