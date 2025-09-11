@@ -10,7 +10,7 @@ from .reco_tools import grappa_reconstruction, coil_combination, pics_reconstruc
 # -----------------------------------------------------------------------------------------------------------------
 
 
-def get_IR(seq0: mr0.sequence.Sequence):
+def get_IR(seq0):
     """Get IR times and indices from a sequence.
 
     Args:
@@ -101,7 +101,7 @@ def crop_nonzero_region(
 class RecoMRzero:
     def __init__(
         self,
-        seq0: mr0.sequence.Sequence, 
+        seq0, 
         freq_os: int = 2, # Siemens default frequency oversampling
     ):
         # input values
