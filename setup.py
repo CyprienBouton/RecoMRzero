@@ -21,6 +21,6 @@ setup(name='recomrzero', # this will be name of package in packages list : pip l
             'numpy',
             'torch',
             'nibabel',
-            'ggrappa @ git+https://github.com/CyprienBouton/ggrappa.git@fix_grid_size',
+            'ggrappa @ git+https://github.com/CyprienBouton/ggrappa.git@slicer',
       ]
      )
