@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import MRzeroCore as mr0
 import nibabel as nib
 
 from .reco_tools import grappa_reconstruction, coil_combination, pics_reconstruction, calc_coil_sensitivity
