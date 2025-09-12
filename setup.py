@@ -20,7 +20,7 @@ setup(name='recomrzero', # this will be name of package in packages list : pip l
             'MRzeroCore',
             'numpy',
             'torch',
-            'nibabel',
+            'SimpleITK',
             'ggrappa @ git+https://github.com/CyprienBouton/ggrappa.git@python_3.9',
       ]
      )

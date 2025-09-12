@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-import nibabel as nib
+import SimpleITK as sitk
 
 from .reco_tools import grappa_reconstruction, coil_combination, pics_reconstruction, calc_coil_sensitivity
 
@@ -135,7 +135,7 @@ class RecoMRzero:
         if self.freq_os not in [1, 2]:
             raise ValueError("Oversampling factor should be 1 (no oversampling) or 2 (Siemens default).")
         for i, r in enumerate(self.seq0):
-            if r.adc_usage.sum() > 0 and np.rad2deg(r.pulse.angle)<=90:
+            if bool(r.adc_usage.sum() > 0) and bool(np.rad2deg(r.pulse.angle)<=90):
                 kspace = self.seq0.get_full_kspace()[i]
                 adc_mask = r.adc_usage>0
                 center = kspace[adc_mask][:,0].abs().argmin()
@@ -199,9 +199,9 @@ class RecoMRzero:
         Returns:
             tuple: (x, y, z) resolution in mm.
         """
-        kspace = self.seq0.get_kspace()[3:]
+        kspace = self.seq0.get_kspace()[:, :3]
         delta_kspace = kspace.max(0).values - kspace.min(0).values
-        return 1/delta_kspace.numpy() * 1000  # in mm
+        return 1/delta_kspace.numpy().astype(np.float64) * 1000  # in mm
     
     ###############################
     # Main functions
@@ -264,8 +264,8 @@ class RecoMRzero:
         
         lin_not_null = (kspace.nonzero(as_tuple=True)[1]).unique()
         mask_lin = [lin_not_null.diff(prepend=torch.Tensor([np.nan]))==1]
-        min_lin = lin_not_null[mask_lin][0]-1
-        max_lin = lin_not_null[mask_lin][-1]
+        min_lin = lin_not_null[tuple(mask_lin)][0]-1
+        max_lin = lin_not_null[tuple(mask_lin)][-1]
         if lin_not_null.diff().max()>1:
             af_lin = lin_not_null.diff().max()
         else:
@@ -274,9 +274,9 @@ class RecoMRzero:
         par_not_null = (kspace.nonzero(as_tuple=True)[0]).unique()
         if len(par_not_null)>1:
             mask_par = [par_not_null.diff(prepend=torch.Tensor([0]))==1]
-            min_par = par_not_null[mask_par][0]-1
-            max_par = par_not_null[mask_par][-1]
-        
+            min_par = par_not_null[tuple(mask_par)][0]-1
+            max_par = par_not_null[tuple(mask_par)][-1]
+
             if par_not_null.diff().max()>1:
                 af_par = par_not_null.diff().max()
             else:
@@ -329,7 +329,7 @@ class RecoMRzero:
         '''
         dim = self.dim_info
         
-        perm_ind = [dim['Col']['ind'], dim['Lin']['ind'], dim['Par']['ind'], dim['Sli']['ind'], dim['Rep']['ind'], dim['Cha']['ind']]
+        perm_ind = [dim['Sli']['ind'], dim['Par']['ind'], dim['Lin']['ind'], dim['Col']['ind'], dim['Rep']['ind'], dim['Cha']['ind']]
         perm_ind = perm_ind + [d['ind'] for d in dim.values() if d['ind'] not in perm_ind]
         volume = volume.permute(perm_ind) 
         volume = volume.squeeze()
@@ -337,25 +337,30 @@ class RecoMRzero:
             volume = volume.unsqueeze(dim=2)
         return volume
     
-    
-    def make_nifti(self, volume:torch.Tensor):        
-        if volume.squeeze().ndim > 4 :
-            print(f"{volume.ndim}D data is not supported")
-            return
-        
-        volume = self.reorder_dims(volume)
-        # Ensure the resolution is a 3-element tuple
+    def make_sitk_image(self) -> sitk.Image:
+        volume = self.img
+
+
+        volume = self.reorder_dims(volume)  # Implement this based on your convention
+
+        # Convert to NumPy
+        data = volume.detach().cpu().numpy().astype(np.float32)
+
+        # Build SimpleITK image
+        sitk_img = sitk.GetImageFromArray(data)
+
+        # Set image metadata
         resolution = self._get_resolution()
-
-        # Build the affine matrix with the resolution (diagonal)
-        affine = np.eye(4)
-        affine[0, 0] = resolution[0]
-        affine[1, 1] = resolution[1]
-        affine[2, 2] = resolution[2]
-        img = nib.Nifti1Image(volume.detach().cpu().numpy(), affine)
-        return img # can be save to nifti with to_filename(...) method
+        sitk_img.SetSpacing(tuple(resolution))
+        sitk_img.SetOrigin((0, 0, 0))
+        sitk_img.SetDirection((
+            -1.0,  0.0,  0.0,  # Flip X: L (left) → R (right)
+            0.0, -1.0,  0.0,  # Flip Y: P (posterior) → A (anterior)
+            0.0,  0.0, -1.0   # Flip Z: I (inferior / down) → S (superior / up)
+        ))
 
     
+        return sitk_img
     
 def to_recotwix_shape(kspace: torch.Tensor):
     """
