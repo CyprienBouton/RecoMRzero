@@ -92,6 +92,28 @@ def crop_nonzero_region(
     return tensor[slices[0], slices[1], slices[2], slices[3]]
 
 
+def center_origin(sitk_img: sitk.Image) -> sitk.Image:
+    """
+    Set the origin so that the SimpleITK image is centered at (0,0,0)
+    in world coordinates, considering its size, spacing, and direction.
+    """
+    spacing = np.array(sitk_img.GetSpacing())
+    direction = np.array(sitk_img.GetDirection()).reshape(3, 3)
+    size = np.array(sitk_img.GetSize(), dtype=float)  # (nx, ny, nz)
+
+    # Physical extent
+    size_mm = size * spacing
+
+    # Half-size vector
+    half_size = 0.5 * size_mm
+
+    # Compute origin = -D @ half_size
+    origin = tuple(-direction @ half_size)
+
+    sitk_img.SetOrigin(origin)
+    return sitk_img
+
+
 # -----------------------------------------------------------------------------------------------------------------
 #  KSpaceReconstructor
 # -----------------------------------------------------------------------------------------------------------------
@@ -366,7 +388,7 @@ class RecoMRzero:
             0.0,  0.0, -1.0   # Flip Z: I (inferior / down) → S (superior / up)
         ))
 
-    
+        sitk_img = center_origin(sitk_img)
         return sitk_img
     
 def to_recotwix_shape(kspace: torch.Tensor):
