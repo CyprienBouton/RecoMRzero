@@ -331,6 +331,8 @@ class RecoMRzero:
         reorder_kspace: bool = False,
         alpha: float = 0.5,
         regularization_value = 0.1,
+        tolerance: float = 0.05,
+        precision: float = 5e-3,
     ):
         self.get_dim_info(signal)
         kspace = self.get_kspace_from_signal(signal, reorder_kspace)
@@ -344,7 +346,14 @@ class RecoMRzero:
         broadcast_shape = [1] * kspace_sparse.ndim
         broadcast_shape[self.dim_info['Par']['ind']] = TR_matrix.shape[0]  # Par
         broadcast_shape[self.dim_info['Lin']['ind']] = TR_matrix.shape[1]  # Lin
-        TR_mask = (TR_matrix > TR_matrix.mean() + alpha * TR_matrix.std()).view(broadcast_shape)
+        base_trigger = torch.mode((self.delta_triggers / precision).round() * precision)[0]
+
+        is_corrupted = (
+            torch.abs(self.delta_triggers - base_trigger)
+            > tolerance * base_trigger
+        )
+
+        TR_mask = is_corrupted.view(broadcast_shape)
 
         # Apply masking to k-space
         kspace_sparse = kspace_sparse.masked_fill(TR_mask, 0)
